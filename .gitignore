@@ -14,6 +14,14 @@ __pycache__/
 .venv/
 venv/
 
+# ── Kept local only — not published in this tool-code repo ───────────────────
+/tests/
+/build_docs.py
+/SQLSlayer_Documentation.md
+/SQLSlayer_Documentation.docx
+/VulnShop_Documentation.md
+/VulnShop_Documentation.docx
+
 # ── Generated artefacts ──────────────────────────────────────────────────────
 ssqli_agent/reports/*.html
 ssqli_agent/reports/*.json
