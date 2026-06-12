@@ -1,0 +1,6 @@
+# Runtime dependencies for the SQL Injection Detection Agent.
+# The agent core, recon pipeline, and HTTP/LLM clients use only the Python
+# standard library. These two packages support the console UI and the bundled
+# vulnerable demo API.
+colorama>=0.4.6      # coloured console logging
+Flask>=3.0.0         # bundled intentionally-vulnerable demo API (target_api/)

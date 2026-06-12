@@ -1,0 +1,21 @@
+# ── Secrets — never commit ───────────────────────────────────────────────────
+.env
+ssqli_agent/.env
+
+# ── VulnShop target lives in its OWN repository ──────────────────────────────
+# Clone the target repo into this folder to run the integration tests:
+#   git clone <vulnshop-repo-url> vulnerable_target
+vulnerable_target/
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# ── Generated artefacts ──────────────────────────────────────────────────────
+ssqli_agent/reports/*.html
+ssqli_agent/reports/*.json
+*.db
+test_app.db
