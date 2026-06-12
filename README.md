@@ -8,6 +8,25 @@ produces CVSS-scored HTML/JSON reports.
 > For **authorised** security testing only. Only scan systems you own or have
 > explicit written permission to assess.
 
+## Quick start
+```powershell
+# 1. Clone the tool
+git clone https://github.com/avartraj/SQLslayer.git
+cd SQLslayer
+
+# 2. Install dependencies (Python 3.10+)
+pip install -r ssqli_agent/requirements.txt
+
+# 3. (Optional) add an LLM key for the AI confirmation pass — works without one too
+copy ssqli_agent\.env.example ssqli_agent\.env
+#    then edit ssqli_agent\.env and set GROQ_API_KEY=...
+
+# 4. Run your first scan
+python ssqli_agent/main.py --url "https://your-target.test/item?id=1"
+```
+No API key? The scan still runs in **static-only** mode (heuristics, no LLM pass).
+Want a safe practice target? See [Vulnerable demo target](#vulnerable-demo-target).
+
 ## Architecture
 The scanner is fully decoupled from anything it scans. The vulnerable demo API
 lives in a **separate repository** (see [Vulnerable demo target](#vulnerable-demo-target)).
