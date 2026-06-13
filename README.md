@@ -140,10 +140,32 @@ Every scan writes three reports to `ssqli_agent/reports/`, all in a formal
 **penetration-test format**, and each finding is labelled with its exact **SQLi
 type** (UNION-based, Boolean-blind, Time-based, Error-based, Stacked,
 Auth-bypass, …):
-- `sqli_report.json` — machine-readable findings (incl. `sqli_type`, `cvss_vector`, `dbms`, `confirmation`)
+- `sqli_report.json` — machine-readable findings (incl. `sqli_type`, `reported_category`, `cvss_vector`, `dbms`, `confirmation`) plus a `category_coverage` block
 - `sqli_report.html` — full PT report: cover, executive summary, scope & methodology,
   findings-summary table, detailed per-finding write-ups, recommendations
 - `sqli_report.md` — same PT structure, AI-written (deterministic template fallback if no LLM)
+
+### Report structure & category coverage
+Each report follows a consistent pentest layout: **1.** Executive Summary · **2.**
+Scope & Methodology · **3. SQLi Category Coverage** · **4.** Summary of Findings ·
+**5.** Detailed Findings · **6.** Recommendations.
+
+The **Category Coverage** matrix is the at-a-glance answer to *what was checked and
+where it was found*. For every SQLi class it shows whether it was **tested**,
+whether it was **confirmed vulnerable**, the **severity / max CVSS**, and the exact
+**endpoint(s) affected**:
+
+| SQLi Category | Status | Probes | Severity | Max CVSS | Endpoint(s) affected |
+| --- | --- | --- | --- | --- | --- |
+| In-band SQLi — UNION-based | **VULNERABLE** | 18 | CRITICAL | 9.0 | `GET /api/users`, `POST /api/reports` |
+| Blind SQLi — Time-based | **VULNERABLE** | 6 | HIGH | 8.6 | `GET /api/categories` |
+| Stacked-queries SQLi | not tested | 0 | — | — | — |
+
+> Each finding's reported **SQLi type** reflects the class actually *demonstrated*,
+> not just the payload sent — e.g. a time-based payload that only triggers a DB
+> error is reported as **error-based**. *Not tested* usually means that class's
+> payloads were withheld (destructive stacked queries are skipped in read-only
+> safe mode; enable with `--allow-destructive` only when authorised).
 
 ## Vulnerable demo target
 A deliberately-vulnerable practice API ("VulnShop") lives in a **separate repo**:
