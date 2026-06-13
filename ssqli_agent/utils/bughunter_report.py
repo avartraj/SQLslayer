@@ -17,12 +17,30 @@ from typing import List, Dict, Any
 from config import CONFIG
 from agent.vulnerability_model import (
     ScanReport, Finding, sqli_type_label, cvss_vector, OWASP_CATEGORY,
+    category_coverage,
 )
 from agent.sqli_agent import LLMClient
 from utils.logger import logger
 
 
 SEV_ORDER = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
+
+
+def _coverage_rows_md(scan: ScanReport) -> List[str]:
+    """Markdown table rows for the per-category coverage matrix."""
+    rows = ["| SQLi Category | Status | Probes | Severity | Max CVSS | Endpoint(s) affected |",
+            "| --- | --- | --- | --- | --- | --- |"]
+    for c in category_coverage(scan):
+        if c["vulnerable"]:
+            status, sev = "**VULNERABLE**", c["severity"]
+            cvss = c["max_cvss"]
+            where = ", ".join(f"`{e}`" for e in c["endpoints"]) or "—"
+        elif c["tested"]:
+            status, sev, cvss, where = "not found", "—", "—", "—"
+        else:
+            status, sev, cvss, where = "not tested", "—", "—", "—"
+        rows.append(f"| {c['sqli_type']} | {status} | {c['probes']} | {sev} | {cvss} | {where} |")
+    return rows
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -35,7 +53,7 @@ def _representative_findings(scan: ScanReport) -> List[Finding]:
         for f in er.findings:
             if not f.is_vulnerable:
                 continue
-            key = (f.endpoint, f.method, f.parameter, f.payload_category)
+            key = (f.endpoint, f.method, f.parameter, f.display_category)
             cur = best.get(key)
             if cur is None or (f.cvss_score, f.confidence) > (cur.cvss_score, cur.confidence):
                 best[key] = f
@@ -62,14 +80,14 @@ def _poc_curl(scan: ScanReport, f: Finding) -> str:
 
 def _findings_payload(scan: ScanReport, findings: List[Finding]) -> List[Dict[str, Any]]:
     return [{
-        "sqli_type": sqli_type_label(f.payload_category),
-        "title": f"{sqli_type_label(f.payload_category)} in `{f.parameter}` on {f.endpoint}",
+        "sqli_type": sqli_type_label(f.display_category),
+        "title": f"{sqli_type_label(f.display_category)} in `{f.parameter}` on {f.endpoint}",
         "severity": f.risk_level.value,
         "cvss": f.cvss_score,
         "cvss_vector": cvss_vector(f.risk_level.value),
         "cwe": ", ".join(f.cwe_refs),
         "owasp": OWASP_CATEGORY,
-        "category": f.payload_category,
+        "category": f.display_category,
         "dbms": f.dbms or "unknown",
         "endpoint": f.endpoint,
         "method": f.method,
@@ -90,6 +108,7 @@ def _findings_payload(scan: ScanReport, findings: List[Finding]) -> List[Dict[st
 # LLM-WRITTEN REPORT
 # ─────────────────────────────────────────────────────────────────────────────
 def _llm_report(scan: ScanReport, items: List[Dict[str, Any]], llm: LLMClient) -> str:
+    coverage = category_coverage(scan)
     meta = {
         "target": scan.target_url,
         "scan_start": scan.scan_start,
@@ -112,6 +131,10 @@ CONFIRMED FINDINGS (JSON array — use these facts ONLY; do NOT invent endpoints
 payloads, or types. Each item has an authoritative `sqli_type`):
 {json.dumps(items, indent=2)}
 
+SQLi CATEGORY COVERAGE (JSON array — one row per SQLi class with tested/confirmed
+status and the endpoints affected; render this VERBATIM as the coverage table):
+{json.dumps(coverage, indent=2)}
+
 Produce a report with EXACTLY this structure and headings:
 
 # SQL Injection — Penetration Test Report
@@ -124,10 +147,13 @@ Produce a report with EXACTLY this structure and headings:
 ## 2. Scope & Methodology
 2-3 sentences: what was tested (target + endpoint/parameter count) and the approach (payload library across all SQLi classes; static signals + boolean/time oracles + DBMS fingerprinting; AI validation; harmless confirmation; CWE-89 / OWASP {OWASP_CATEGORY}).
 
-## 3. Summary of Findings
+## 3. SQLi Category Coverage
+One sentence stating every SQLi class was probed, then a Markdown table built from the COVERAGE array with columns: SQLi Category | Status | Probes | Severity | Max CVSS | Endpoint(s) affected. For each row: Status is **VULNERABLE** when `vulnerable` is true (else "not found" if `tested` else "not tested"); list the `endpoints` verbatim. Do not omit any category.
+
+## 4. Summary of Findings
 A Markdown table with columns: ID | Severity | SQLi Type | Endpoint | Parameter | CVSS. Number findings F-01, F-02, … in descending severity.
 
-## 4. Detailed Findings
+## 5. Detailed Findings
 For EACH finding a `### F-NN — [SEVERITY] <sqli_type>` section containing these labelled lines:
 - **SQLi Type:** <the item's `sqli_type` verbatim>
 - **Severity / CVSS:** <severity> / <cvss> `<cvss_vector>`
@@ -142,10 +168,10 @@ For EACH finding a `### F-NN — [SEVERITY] <sqli_type>` section containing thes
 - **Impact:** concrete consequences for THIS sqli_type.
 - **Remediation:** the specific fix.
 
-## 5. Recommendations
+## 6. Recommendations
 A prioritised checklist (parameterised queries, allow-listing ORDER BY, least-privilege DB user, error suppression, WAF, re-test).
 
-## 6. Disclaimer
+## 7. Disclaimer
 One line: authorised testing only; automated findings should be manually validated.
 
 Output ONLY the Markdown — no preamble and no code fence around the whole document."""
@@ -193,7 +219,16 @@ def _template_report(scan: ScanReport, items: List[Dict[str, Any]]) -> str:
         "DBMS fingerprinting and an AI validation pass, then proven with a harmless "
         f"confirmation. **Standards:** CWE-89 · OWASP {OWASP_CATEGORY}.",
         "",
-        "## 3. Summary of Findings",
+        "## 3. SQLi Category Coverage",
+        "",
+        "Every SQL injection class was probed. This matrix shows, per class, whether "
+        "it was tested, whether it was confirmed, and on which endpoint(s). "
+        "_Not tested_ usually means that class's payloads were withheld (e.g. "
+        "destructive stacked queries are skipped in read-only safe mode).",
+        "",
+        *_coverage_rows_md(scan),
+        "",
+        "## 4. Summary of Findings",
         "",
         "| ID | Severity | SQLi Type | Endpoint | Parameter | CVSS |",
         "| --- | --- | --- | --- | --- | --- |",
@@ -201,7 +236,7 @@ def _template_report(scan: ScanReport, items: List[Dict[str, Any]]) -> str:
     for i, it in enumerate(items, 1):
         lines.append(f"| F-{i:02d} | {it['severity']} | {it['sqli_type']} | "
                      f"`{it['method']} {it['endpoint']}` | `{it['parameter']}` | {it['cvss']} |")
-    lines += ["", "## 4. Detailed Findings", ""]
+    lines += ["", "## 5. Detailed Findings", ""]
 
     for i, it in enumerate(items, 1):
         lines += [
@@ -235,7 +270,7 @@ def _template_report(scan: ScanReport, items: List[Dict[str, Any]]) -> str:
         ]
 
     lines += [
-        "## 5. Recommendations",
+        "## 6. Recommendations",
         "",
         "1. Replace all string-concatenated SQL with **parameterised queries / prepared statements**.",
         "2. For non-parameterisable clauses (e.g. `ORDER BY`), **allow-list** valid column names.",
@@ -244,7 +279,7 @@ def _template_report(scan: ScanReport, items: List[Dict[str, Any]]) -> str:
         "5. Add a **WAF** and server-side input validation as defence-in-depth.",
         "6. **Re-test** after remediation to confirm closure.",
         "",
-        "## 6. Disclaimer",
+        "## 7. Disclaimer",
         "",
         "_For authorised security testing only. Automated findings should be manually validated before remediation sign-off._",
     ]

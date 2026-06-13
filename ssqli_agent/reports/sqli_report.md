@@ -1,41 +1,59 @@
 # SQL Injection — Penetration Test Report
 
-**Target:** http://127.0.0.1:5050  |  **Date:** 2026-06-11  |  **Assessed by:** SQLSlayer (automated agent)  |  **Classification:** CONFIDENTIAL
+**Target:** http://127.0.0.1:5050  |  **Date:** 2026-06-13  |  **Assessed by:** SQLSlayer (automated agent)  |  **Classification:** CONFIDENTIAL
 
 ## 1. Executive Summary
 
-SQLSlayer assessed 10 endpoint(s) with 95 probes and confirmed 54 SQL injection finding(s) (18 unique), of which 20 are CRITICAL. Overall risk is **CRITICAL**. Unsanitised user input is concatenated directly into SQL statements, allowing data disclosure, authentication bypass and — where stacked queries execute — full database compromise.
+SQLSlayer assessed 10 endpoint(s) with 95 probes and confirmed 55 SQL injection finding(s) (19 unique), of which 19 are CRITICAL. Overall risk is **CRITICAL**. Unsanitised user input is concatenated directly into SQL statements, allowing data disclosure, authentication bypass and — where stacked queries execute — full database compromise.
 
-Severity breakdown: CRITICAL 9, HIGH 7, MEDIUM 1, LOW 1.
+Severity breakdown: CRITICAL 8, HIGH 9, MEDIUM 1, LOW 1.
 
 ## 2. Scope & Methodology
 
 **Scope:** http://127.0.0.1:5050 — 10 endpoint(s)/parameter(s). **Methodology:** each parameter was baselined and probed across all SQLi classes; findings were determined from database errors, reflected UNION/SQL data, response differentials, a boolean true/false oracle, and a jitter-aware time oracle, with DBMS fingerprinting and an AI validation pass, then proven with a harmless confirmation. **Standards:** CWE-89 · OWASP A03:2021 – Injection.
 
-## 3. Summary of Findings
+## 3. SQLi Category Coverage
+
+Every SQL injection class was probed. This matrix shows, per class, whether it was tested, whether it was confirmed, and on which endpoint(s). _Not tested_ usually means that class's payloads were withheld (e.g. destructive stacked queries are skipped in read-only safe mode).
+
+| SQLi Category | Status | Probes | Severity | Max CVSS | Endpoint(s) affected |
+| --- | --- | --- | --- | --- | --- |
+| In-band SQLi — UNION-based | **VULNERABLE** | 18 | CRITICAL | 9.0 | `GET /api/users`, `POST /api/reports` |
+| Blind SQLi — Boolean-based | **VULNERABLE** | 6 | MEDIUM | 6.8 | `GET /api/orders` |
+| Blind SQLi — Time-based | **VULNERABLE** | 5 | HIGH | 8.6 | `GET /api/categories` |
+| In-band SQLi — Error-based | **VULNERABLE** | 23 | CRITICAL | 9.0 | `GET /api/orders`, `GET /api/categories`, `POST /api/reports`, `GET /api/leaderboard` |
+| Stacked-queries SQLi | **VULNERABLE** | 4 | CRITICAL | 9.0 | `DELETE /api/messages` |
+| Authentication bypass (SQL comment injection) | **VULNERABLE** | 16 | CRITICAL | 9.0 | `POST /api/login`, `PUT /api/profile` |
+| SQLi via HTTP header | **VULNERABLE** | 3 | HIGH | 8.6 | `GET /api/audit` |
+| SQLi in ORDER BY clause | **VULNERABLE** | 5 | LOW | 2.8 | `GET /api/leaderboard` |
+| Second-order (stored) SQLi | **VULNERABLE** | 2 | CRITICAL | 9.0 | `PUT /api/profile` |
+| Tautology-based SQLi | **VULNERABLE** | 15 | HIGH | 8.1 | `GET /api/users`, `POST /api/login`, `GET /api/audit`, `POST /api/reports`, `DELETE /api/messages` |
+
+## 4. Summary of Findings
 
 | ID | Severity | SQLi Type | Endpoint | Parameter | CVSS |
 | --- | --- | --- | --- | --- | --- |
 | F-01 | CRITICAL | In-band SQLi — UNION-based | `GET /api/users` | `id` | 9.0 |
-| F-02 | CRITICAL | Blind SQLi — Time-based | `GET /api/categories` | `cat` | 9.0 |
-| F-03 | CRITICAL | Authentication bypass (SQL comment injection) | `POST /api/login` | `username` | 9.0 |
-| F-04 | CRITICAL | In-band SQLi — UNION-based | `POST /api/reports` | `report_id` | 9.0 |
-| F-05 | CRITICAL | In-band SQLi — Error-based | `POST /api/reports` | `report_id` | 9.0 |
-| F-06 | CRITICAL | Second-order (stored) SQLi | `PUT /api/profile` | `bio` | 9.0 |
-| F-07 | CRITICAL | Authentication bypass (SQL comment injection) | `PUT /api/profile` | `bio` | 9.0 |
-| F-08 | CRITICAL | In-band SQLi — Error-based | `GET /api/leaderboard` | `sort` | 9.0 |
-| F-09 | CRITICAL | Stacked-queries SQLi | `DELETE /api/messages` | `msg_id` | 9.0 |
+| F-02 | CRITICAL | Authentication bypass (SQL comment injection) | `POST /api/login` | `username` | 9.0 |
+| F-03 | CRITICAL | In-band SQLi — UNION-based | `POST /api/reports` | `report_id` | 9.0 |
+| F-04 | CRITICAL | In-band SQLi — Error-based | `POST /api/reports` | `report_id` | 9.0 |
+| F-05 | CRITICAL | Second-order (stored) SQLi | `PUT /api/profile` | `bio` | 9.0 |
+| F-06 | CRITICAL | Authentication bypass (SQL comment injection) | `PUT /api/profile` | `bio` | 9.0 |
+| F-07 | CRITICAL | In-band SQLi — Error-based | `GET /api/leaderboard` | `sort` | 9.0 |
+| F-08 | CRITICAL | Stacked-queries SQLi | `DELETE /api/messages` | `msg_id` | 9.0 |
+| F-09 | HIGH | Blind SQLi — Time-based | `GET /api/categories` | `cat` | 8.6 |
 | F-10 | HIGH | SQLi via HTTP header | `GET /api/audit` | `User-Agent` | 8.6 |
 | F-11 | HIGH | Tautology-based SQLi | `GET /api/users` | `id` | 8.1 |
-| F-12 | HIGH | Blind SQLi — Boolean-based | `GET /api/orders` | `order_id` | 7.1 |
-| F-13 | HIGH | Tautology-based SQLi | `POST /api/login` | `username` | 7.1 |
-| F-14 | HIGH | Tautology-based SQLi | `GET /api/audit` | `User-Agent` | 7.1 |
-| F-15 | HIGH | Tautology-based SQLi | `POST /api/reports` | `report_id` | 7.1 |
-| F-16 | HIGH | Tautology-based SQLi | `DELETE /api/messages` | `msg_id` | 7.1 |
-| F-17 | MEDIUM | In-band SQLi — Error-based | `GET /api/categories` | `cat` | 5.2 |
-| F-18 | LOW | SQLi in ORDER BY clause | `GET /api/leaderboard` | `sort` | 2.8 |
+| F-12 | HIGH | In-band SQLi — Error-based | `GET /api/orders` | `order_id` | 7.1 |
+| F-13 | HIGH | In-band SQLi — Error-based | `GET /api/categories` | `cat` | 7.1 |
+| F-14 | HIGH | Tautology-based SQLi | `POST /api/login` | `username` | 7.1 |
+| F-15 | HIGH | Tautology-based SQLi | `GET /api/audit` | `User-Agent` | 7.1 |
+| F-16 | HIGH | Tautology-based SQLi | `POST /api/reports` | `report_id` | 7.1 |
+| F-17 | HIGH | Tautology-based SQLi | `DELETE /api/messages` | `msg_id` | 7.1 |
+| F-18 | MEDIUM | Blind SQLi — Boolean-based | `GET /api/orders` | `order_id` | 6.8 |
+| F-19 | LOW | SQLi in ORDER BY clause | `GET /api/leaderboard` | `sort` | 2.8 |
 
-## 4. Detailed Findings
+## 5. Detailed Findings
 
 ### F-01 — [CRITICAL] In-band SQLi — UNION-based
 
@@ -66,36 +84,7 @@ Observed evidence: `DB error pattern(s): unrecognized token ; SQLi indicator(s) 
 
 ---
 
-### F-02 — [CRITICAL] Blind SQLi — Time-based
-
-- **SQLi Type:** Blind SQLi — Time-based
-- **Severity / CVSS:** CRITICAL / 9.0 `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H`
-- **Classification:** CWE-89 · OWASP A03:2021 – Injection
-- **Database:** unknown
-- **Affected:** `GET /api/categories` — parameter `cat`
-- **Detection:** ERROR_LEAK (confidence 0.95)
-
-**Description.** A conditional time delay can be injected, letting an attacker infer data from response timing.
-
-**Proof of Concept.**
-
-```bash
-curl "http://127.0.0.1:5050/api/categories?cat=1; WAITFOR DELAY '0:0:3'--"
-```
-
-Observed evidence: `DB error pattern(s): syntax error ; (weak) HTTP 500 triggered (baseline was 200)`
-
-**Confirmation (harmless PoC):** Exploitability CONFIRMED (harmless): UNION injection [UNION, 1 cols] reflected our unique marker 'SQLSLAYERxPoC' and read the DBMS version → '||sqlite_version()||'. No application/user data was accessed. PoC payload: electronics UNION SELECT 'SQLSLAYERxPoC:'||sqlite_version()||':SQLSLAYERxPoC'-- -
-
-
-
-**Impact.** Blind data extraction via timing side-channel even when no output is returned.
-
-**Remediation.** Use parameterised queries. Set strict query timeouts.
-
----
-
-### F-03 — [CRITICAL] Authentication bypass (SQL comment injection)
+### F-02 — [CRITICAL] Authentication bypass (SQL comment injection)
 
 - **SQLi Type:** Authentication bypass (SQL comment injection)
 - **Severity / CVSS:** CRITICAL / 9.0 `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H`
@@ -124,7 +113,7 @@ Observed evidence: `DB error pattern(s): unrecognized token ; SQLi indicator(s) 
 
 ---
 
-### F-04 — [CRITICAL] In-band SQLi — UNION-based
+### F-03 — [CRITICAL] In-band SQLi — UNION-based
 
 - **SQLi Type:** In-band SQLi — UNION-based
 - **Severity / CVSS:** CRITICAL / 9.0 `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H`
@@ -153,7 +142,7 @@ Observed evidence: `DB error pattern(s): syntax error ; SQLi indicator(s) appear
 
 ---
 
-### F-05 — [CRITICAL] In-band SQLi — Error-based
+### F-04 — [CRITICAL] In-band SQLi — Error-based
 
 - **SQLi Type:** In-band SQLi — Error-based
 - **Severity / CVSS:** CRITICAL / 9.0 `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H`
@@ -182,7 +171,7 @@ Observed evidence: `DB error pattern(s): syntax error ; (weak) HTTP 500 triggere
 
 ---
 
-### F-06 — [CRITICAL] Second-order (stored) SQLi
+### F-05 — [CRITICAL] Second-order (stored) SQLi
 
 - **SQLi Type:** Second-order (stored) SQLi
 - **Severity / CVSS:** CRITICAL / 9.0 `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H`
@@ -211,7 +200,7 @@ Observed evidence: `DB error pattern(s): syntax error ; (weak) HTTP 500 triggere
 
 ---
 
-### F-07 — [CRITICAL] Authentication bypass (SQL comment injection)
+### F-06 — [CRITICAL] Authentication bypass (SQL comment injection)
 
 - **SQLi Type:** Authentication bypass (SQL comment injection)
 - **Severity / CVSS:** CRITICAL / 9.0 `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H`
@@ -240,7 +229,7 @@ Observed evidence: `DB error pattern(s): unrecognized token ; (weak) HTTP 500 tr
 
 ---
 
-### F-08 — [CRITICAL] In-band SQLi — Error-based
+### F-07 — [CRITICAL] In-band SQLi — Error-based
 
 - **SQLi Type:** In-band SQLi — Error-based
 - **Severity / CVSS:** CRITICAL / 9.0 `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H`
@@ -268,7 +257,7 @@ Observed evidence: `DB error pattern(s): unrecognized token ; (weak) HTTP 500 tr
 
 ---
 
-### F-09 — [CRITICAL] Stacked-queries SQLi
+### F-08 — [CRITICAL] Stacked-queries SQLi
 
 - **SQLi Type:** Stacked-queries SQLi
 - **Severity / CVSS:** CRITICAL / 9.0 `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H`
@@ -293,6 +282,35 @@ Observed evidence: `DB error pattern(s): no such table ; SQLi indicator(s) appea
 **Impact.** Execution of arbitrary additional statements — data modification, account creation, or table drops (full DB compromise).
 
 **Remediation.** Disable multi-statement execution. Use parameterised queries.
+
+---
+
+### F-09 — [HIGH] Blind SQLi — Time-based
+
+- **SQLi Type:** Blind SQLi — Time-based
+- **Severity / CVSS:** HIGH / 8.6 `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N`
+- **Classification:** CWE-89 · OWASP A03:2021 – Injection
+- **Database:** unknown
+- **Affected:** `GET /api/categories` — parameter `cat`
+- **Detection:** TIME_DELTA (confidence 0.9)
+
+**Description.** A conditional time delay can be injected, letting an attacker infer data from response timing.
+
+**Proof of Concept.**
+
+```bash
+curl "http://127.0.0.1:5050/api/categories?cat=electronics' AND 1=(SELECT 1 FROM (WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c WHERE x<5*6000000) SELECT count(*) AS k FROM c) WHERE k>=0)-- -"
+```
+
+Observed evidence: `Time oracle [SQLite/single-quote] confirmed: payload delayed 8854ms & 5929ms vs baseline ~16ms (control 12ms) — two confirmed delays, fast control.`
+
+**Confirmation (harmless PoC):** Exploitability CONFIRMED (harmless): UNION injection [UNION, 1 cols] reflected our unique marker 'SQLSLAYERxPoC' and read the DBMS version → '||sqlite_version()||'. No application/user data was accessed. PoC payload: electronics UNION SELECT 'SQLSLAYERxPoC:'||sqlite_version()||':SQLSLAYERxPoC'-- -
+
+
+
+**Impact.** Blind data extraction via timing side-channel even when no output is returned.
+
+**Remediation.** Use parameterised queries. Set strict query timeouts.
 
 ---
 
@@ -354,16 +372,16 @@ Observed evidence: `Row count increased 1 → 3 (tautology successful)`
 
 ---
 
-### F-12 — [HIGH] Blind SQLi — Boolean-based
+### F-12 — [HIGH] In-band SQLi — Error-based
 
-- **SQLi Type:** Blind SQLi — Boolean-based
+- **SQLi Type:** In-band SQLi — Error-based
 - **Severity / CVSS:** HIGH / 7.1 `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N`
 - **Classification:** CWE-89 · OWASP A03:2021 – Injection
 - **Database:** SQLite
 - **Affected:** `GET /api/orders` — parameter `order_id`
 - **Detection:** ERROR_LEAK (confidence 0.95)
 
-**Description.** The query logic can be altered with a boolean condition; TRUE and FALSE conditions yield different responses, enabling data inference.
+**Description.** Malformed input raises a database error that is reflected to the client, leaking structure/version.
 
 **Proof of Concept.**
 
@@ -377,13 +395,42 @@ Observed evidence: `DB error pattern(s): no such column ; (weak) status changed 
 
 
 
-**Impact.** Bit-by-bit data extraction by observing true/false response differences.
+**Impact.** Database structure and data leaked through verbose error messages.
 
-**Remediation.** Use parameterised queries. Implement WAF rules for boolean operators.
+**Remediation.** Suppress detailed DB errors in responses. Use generic error messages.
 
 ---
 
-### F-13 — [HIGH] Tautology-based SQLi
+### F-13 — [HIGH] In-band SQLi — Error-based
+
+- **SQLi Type:** In-band SQLi — Error-based
+- **Severity / CVSS:** HIGH / 7.1 `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N`
+- **Classification:** CWE-89 · OWASP A03:2021 – Injection
+- **Database:** unknown
+- **Affected:** `GET /api/categories` — parameter `cat`
+- **Detection:** ERROR_LEAK (confidence 0.95)
+
+**Description.** Malformed input raises a database error that is reflected to the client, leaking structure/version.
+
+**Proof of Concept.**
+
+```bash
+curl "http://127.0.0.1:5050/api/categories?cat=1; WAITFOR DELAY '0:0:3'--"
+```
+
+Observed evidence: `DB error pattern(s): syntax error ; (weak) HTTP 500 triggered (baseline was 200)`
+
+**Confirmation (harmless PoC):** Exploitability CONFIRMED (harmless): UNION injection [UNION, 1 cols] reflected our unique marker 'SQLSLAYERxPoC' and read the DBMS version → '||sqlite_version()||'. No application/user data was accessed. PoC payload: electronics UNION SELECT 'SQLSLAYERxPoC:'||sqlite_version()||':SQLSLAYERxPoC'-- -
+
+
+
+**Impact.** Database structure and data leaked through verbose error messages.
+
+**Remediation.** Suppress detailed DB errors in responses. Use generic error messages.
+
+---
+
+### F-14 — [HIGH] Tautology-based SQLi
 
 - **SQLi Type:** Tautology-based SQLi
 - **Severity / CVSS:** HIGH / 7.1 `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N`
@@ -412,7 +459,7 @@ Observed evidence: `DB error pattern(s): unrecognized token ; SQLi indicator(s) 
 
 ---
 
-### F-14 — [HIGH] Tautology-based SQLi
+### F-15 — [HIGH] Tautology-based SQLi
 
 - **SQLi Type:** Tautology-based SQLi
 - **Severity / CVSS:** HIGH / 7.1 `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N`
@@ -441,7 +488,7 @@ Observed evidence: `DB error pattern(s): unrecognized token ; (weak) HTTP 500 tr
 
 ---
 
-### F-15 — [HIGH] Tautology-based SQLi
+### F-16 — [HIGH] Tautology-based SQLi
 
 - **SQLi Type:** Tautology-based SQLi
 - **Severity / CVSS:** HIGH / 7.1 `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N`
@@ -470,7 +517,7 @@ Observed evidence: `DB error pattern(s): syntax error ; (weak) HTTP 500 triggere
 
 ---
 
-### F-16 — [HIGH] Tautology-based SQLi
+### F-17 — [HIGH] Tautology-based SQLi
 
 - **SQLi Type:** Tautology-based SQLi
 - **Severity / CVSS:** HIGH / 7.1 `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N`
@@ -498,36 +545,36 @@ Observed evidence: `DB error pattern(s): unrecognized token ; (weak) HTTP 500 tr
 
 ---
 
-### F-17 — [MEDIUM] In-band SQLi — Error-based
+### F-18 — [MEDIUM] Blind SQLi — Boolean-based
 
-- **SQLi Type:** In-band SQLi — Error-based
-- **Severity / CVSS:** MEDIUM / 5.2 `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N`
+- **SQLi Type:** Blind SQLi — Boolean-based
+- **Severity / CVSS:** MEDIUM / 6.8 `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N`
 - **Classification:** CWE-89 · OWASP A03:2021 – Injection
 - **Database:** SQLite
-- **Affected:** `GET /api/categories` — parameter `cat`
-- **Detection:** ERROR_LEAK (confidence 0.95)
+- **Affected:** `GET /api/orders` — parameter `order_id`
+- **Detection:** DIFFERENTIAL (confidence 0.9)
 
-**Description.** Malformed input raises a database error that is reflected to the client, leaking structure/version.
+**Description.** The query logic can be altered with a boolean condition; TRUE and FALSE conditions yield different responses, enabling data inference.
 
 **Proof of Concept.**
 
 ```bash
-curl "http://127.0.0.1:5050/api/categories?cat='"
+curl "http://127.0.0.1:5050/api/orders?order_id=1 AND 1=1  ⟷  (FALSE variant)"
 ```
 
-Observed evidence: `DB error pattern(s): unrecognized token ; Expected indicator 'error' appeared post-injection ; (weak) HTTP 500 triggered (baseline was 200)`
+Observed evidence: `Boolean oracle [numeric] confirmed (ratio≥0.95): TRUE [1 AND 1=1] tracks baseline while FALSE [1 AND 1=2] diverges — response follows the injected condition (re-tested).`
 
-**Confirmation (harmless PoC):** Exploitability CONFIRMED (harmless): UNION injection [UNION, 1 cols] reflected our unique marker 'SQLSLAYERxPoC' and read the DBMS version → '||sqlite_version()||'. No application/user data was accessed. PoC payload: electronics UNION SELECT 'SQLSLAYERxPoC:'||sqlite_version()||':SQLSLAYERxPoC'-- -
+**Confirmation (harmless PoC):** Exploitability CONFIRMED (harmless): UNION injection [UNION, 4 cols] reflected our unique marker 'SQLSLAYERxPoC' and read the DBMS version → 3.43.1. No application/user data was accessed. PoC payload: 1 UNION SELECT 'SQLSLAYERxPoC:'||sqlite_version()||':SQLSLAYERxPoC',NULL,NULL,NULL-- -
 
 
 
-**Impact.** Database structure and data leaked through verbose error messages.
+**Impact.** Bit-by-bit data extraction by observing true/false response differences.
 
-**Remediation.** Suppress detailed DB errors in responses. Use generic error messages.
+**Remediation.** Use parameterised queries. Implement WAF rules for boolean operators.
 
 ---
 
-### F-18 — [LOW] SQLi in ORDER BY clause
+### F-19 — [LOW] SQLi in ORDER BY clause
 
 - **SQLi Type:** SQLi in ORDER BY clause
 - **Severity / CVSS:** LOW / 2.8 `CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:N/A:N`
@@ -555,7 +602,7 @@ Observed evidence: `DB error pattern(s): syntax error ; (weak) HTTP 500 triggere
 
 ---
 
-## 5. Recommendations
+## 6. Recommendations
 
 1. Replace all string-concatenated SQL with **parameterised queries / prepared statements**.
 2. For non-parameterisable clauses (e.g. `ORDER BY`), **allow-list** valid column names.
@@ -564,6 +611,6 @@ Observed evidence: `DB error pattern(s): syntax error ; (weak) HTTP 500 triggere
 5. Add a **WAF** and server-side input validation as defence-in-depth.
 6. **Re-test** after remediation to confirm closure.
 
-## 6. Disclaimer
+## 7. Disclaimer
 
 _For authorised security testing only. Automated findings should be manually validated before remediation sign-off._

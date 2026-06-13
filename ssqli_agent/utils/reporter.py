@@ -11,6 +11,7 @@ from typing import List, Dict
 
 from agent.vulnerability_model import (
     ScanReport, Finding, RiskLevel, sqli_type_label, cvss_vector, OWASP_CATEGORY,
+    category_coverage,
 )
 
 RISK_COLORS = {
@@ -50,6 +51,7 @@ TYPE_IMPACT = {
 # ─────────────────────────────────────────────────────────────────────────────
 def generate_json_report(scan: ScanReport, output_dir: str) -> str:
     os.makedirs(output_dir, exist_ok=True)
+    coverage = category_coverage(scan)
     out = {
         "meta": {
             "tool": "SQLSlayer v1.0", "target": scan.target_url,
@@ -61,7 +63,10 @@ def generate_json_report(scan: ScanReport, output_dir: str) -> str:
             "total_vulnerabilities": scan.total_vulnerabilities,
             "critical": scan.critical_count,
             "overall_risk": scan.overall_risk.value,
+            "categories_tested": sum(1 for c in coverage if c["tested"]),
+            "categories_vulnerable": sum(1 for c in coverage if c["vulnerable"]),
         },
+        "category_coverage": coverage,
         "endpoints": [
             {
                 "endpoint": r.endpoint, "method": r.method,
@@ -87,7 +92,7 @@ def _representative(scan: ScanReport) -> List[Finding]:
         for f in er.findings:
             if not f.is_vulnerable:
                 continue
-            key = (f.endpoint, f.method, f.parameter, f.payload_category)
+            key = (f.endpoint, f.method, f.parameter, f.display_category)
             cur = best.get(key)
             if cur is None or (f.cvss_score, f.confidence) > (cur.cvss_score, cur.confidence):
                 best[key] = f
@@ -99,6 +104,30 @@ def _representative(scan: ScanReport) -> List[Finding]:
 def generate_html_report(scan: ScanReport, output_dir: str) -> str:
     os.makedirs(output_dir, exist_ok=True)
     findings = _representative(scan)
+    coverage = category_coverage(scan)
+
+    # ── category-coverage matrix rows ─────────────────────────────────────────
+    cov_rows = ""
+    for cov in coverage:
+        if cov["vulnerable"]:
+            cc = RISK_COLORS.get(cov["severity"], "#555")
+            status = f'<span class="badge" style="background:{cc}">VULNERABLE</span>'
+            sev = f'<span class="badge" style="background:{cc}">{cov["severity"]}</span>'
+            cvss = cov["max_cvss"]
+            where = ", ".join(f"<code>{_escape(e)}</code>" for e in cov["endpoints"]) or "—"
+        elif cov["tested"]:
+            status = '<span class="badge" style="background:#27ae60">not found</span>'
+            sev = "—"; cvss = "—"; where = "—"
+        else:
+            status = '<span class="badge" style="background:#95a5a6">not tested</span>'
+            sev = "—"; cvss = "—"; where = "—"
+        cov_rows += f"""<tr>
+            <td>{_escape(cov['sqli_type'])}</td>
+            <td>{status}</td>
+            <td>{cov['probes']}</td>
+            <td>{sev}</td>
+            <td>{cvss}</td>
+            <td>{where}</td></tr>"""
 
     # severity tallies
     sev_counts = {s: 0 for s in ("CRITICAL", "HIGH", "MEDIUM", "LOW")}
@@ -115,7 +144,7 @@ def generate_html_report(scan: ScanReport, output_dir: str) -> str:
         summary_rows += f"""<tr>
             <td>F-{i:02d}</td>
             <td><span class="badge" style="background:{c}">{f.risk_level.value}</span></td>
-            <td>{_escape(sqli_type_label(f.payload_category))}</td>
+            <td>{_escape(sqli_type_label(f.display_category))}</td>
             <td><code>{_escape(f.method)} {_escape(f.endpoint)}</code></td>
             <td><code>{_escape(f.parameter)}</code></td>
             <td>{f.cvss_score}</td></tr>"""
@@ -124,7 +153,7 @@ def generate_html_report(scan: ScanReport, output_dir: str) -> str:
     details = ""
     for i, f in enumerate(findings, 1):
         c = RISK_COLORS.get(f.risk_level.value, "#555")
-        cat = f.payload_category
+        cat = f.display_category
         rows = [
             ("Severity", f'<span class="badge" style="background:{c}">{f.risk_level.value}</span>'),
             ("SQLi type", f"<b>{_escape(sqli_type_label(cat))}</b>"),
@@ -239,7 +268,20 @@ def generate_html_report(scan: ScanReport, output_dir: str) -> str:
 </section>
 
 <section>
-  <h2>3. Summary of Findings</h2>
+  <h2>3. SQLi Category Coverage</h2>
+  <p>Every SQL injection class was probed. The matrix below shows, per class,
+  whether it was tested, whether it was confirmed vulnerable, and on which
+  endpoint(s) — so coverage and where each category was found are explicit.
+  <i>Not tested</i> typically means that class's payloads were withheld (e.g.
+  destructive stacked queries are skipped in read-only safe mode).</p>
+  <table class="grid">
+    <tr><th>SQLi category</th><th>Status</th><th>Probes</th><th>Severity</th><th>Max CVSS</th><th>Endpoint(s) affected</th></tr>
+    {cov_rows}
+  </table>
+</section>
+
+<section>
+  <h2>4. Summary of Findings</h2>
   <table class="grid">
     <tr><th>ID</th><th>Severity</th><th>SQLi type</th><th>Endpoint</th><th>Parameter</th><th>CVSS</th></tr>
     {summary_rows}
@@ -247,12 +289,12 @@ def generate_html_report(scan: ScanReport, output_dir: str) -> str:
 </section>
 
 <section>
-  <h2>4. Detailed Findings</h2>
+  <h2>5. Detailed Findings</h2>
   {details}
 </section>
 
 <section>
-  <h2>5. Recommendations</h2>
+  <h2>6. Recommendations</h2>
   <ol>
     <li>Replace all string-concatenated SQL with <b>parameterised queries / prepared statements</b>.</li>
     <li>For non-parameterisable clauses (e.g. <code>ORDER BY</code>), <b>allow-list</b> valid column names.</li>

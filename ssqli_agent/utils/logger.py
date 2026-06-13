@@ -52,7 +52,7 @@ class Logger:
         self.verbose = verbose
 
     def _log(self, level: str, msg: str):
-        ts = datetime.datetime.utcnow().strftime("%H:%M:%S")
+        ts = datetime.datetime.now(datetime.timezone.utc).strftime("%H:%M:%S")
         color, sym = LEVEL_STYLE.get(level, (W, "[*]"))
         # e.g.  ┌ 18:42:01 [+] message
         print(f"{G}{DIM}┌{RST}{DIM}{ts}{RST} {color}{sym}{RST} {color}{msg}{RST}")

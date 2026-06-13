@@ -29,10 +29,12 @@ from agent.payload_engine import (
     Payload, PAYLOADS, PayloadCategory, get_payloads_by_category, filter_safe
 )
 from agent.vulnerability_model import (
-    Finding, DetectionMethod, RiskLevel, score_finding
+    Finding, DetectionMethod, RiskLevel, score_finding, derive_reported_category
 )
 from agent import response_compare as rc
-from agent.dbms_fingerprint import fingerprint as dbms_fingerprint, TIME_PAYLOADS
+from agent.dbms_fingerprint import (
+    fingerprint as dbms_fingerprint, time_oracle_payloads,
+)
 from utils.http_client import http_request, HTTPResponse
 from utils.logger import logger
 
@@ -362,9 +364,18 @@ class SQLSlayer:
             if is_vuln and confidence < CONFIG.agent.min_confidence:
                 is_vuln = False
 
-            risk, cvss, remediation = score_finding(
-                payload.category.value, payload.severity, is_vuln, confidence
-            )
+            # Report the class actually demonstrated (e.g. a time-based payload
+            # that only leaked a DB error is reported as error-based) and score it
+            # against that class so severity/remediation stay consistent.
+            reported_cat = derive_reported_category(payload.category.value, det_method)
+            if reported_cat != payload.category.value:
+                rep_sev = {"ERROR_BASED": "HIGH", "TIME_BASED": "CRITICAL"}.get(
+                    reported_cat, payload.severity)
+                risk, cvss, remediation = score_finding(reported_cat, rep_sev, is_vuln, confidence)
+            else:
+                risk, cvss, remediation = score_finding(
+                    payload.category.value, payload.severity, is_vuln, confidence
+                )
 
             finding = Finding(
                 endpoint         = endpoint_label,
@@ -383,6 +394,7 @@ class SQLSlayer:
                 response_time_ms = resp.response_time_ms,
                 remediation      = remediation,
                 dbms             = signals["dbms"],
+                reported_category = reported_cat,
             )
             findings.append(finding)
 
@@ -721,16 +733,12 @@ class SQLSlayer:
         cal = [fire(bv).response_time_ms for _ in range(3)]
         base = max(cal)                                  # worst-case normal latency
 
-        # Prefer the fingerprinted DBMS payload; otherwise try the common set.
-        candidates = []
-        if dbms and dbms in TIME_PAYLOADS:
-            candidates.append((dbms, TIME_PAYLOADS[dbms]))
-        for name, tmpl in TIME_PAYLOADS.items():
-            if (name, tmpl) not in candidates:
-                candidates.append((name, tmpl))
+        # Candidates span every DBMS delay form across every injection boundary
+        # (numeric, single/double-quote, paren, stacked) so a delay is detected in
+        # quoted-string contexts too — prefer the fingerprinted DBMS first.
+        candidates = time_oracle_payloads(bv, delay, dbms)
 
-        for name, tmpl in candidates:
-            pv = tmpl.format(bv=bv, d=delay)
+        for name, pv in candidates:
             r1 = fire(pv)
             if r1.response_time_ms - base < threshold_ms:
                 continue

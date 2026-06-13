@@ -69,7 +69,7 @@ def scan_targets(targets: List[ParamTarget],
     if not targets:
         logger.error("No injectable targets to scan.")
     agent = SQLSlayer()
-    scan_start = datetime.datetime.utcnow().isoformat()
+    scan_start = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
     endpoint_reports: List[EndpointReport] = []
     total_probes = 0
@@ -92,7 +92,7 @@ def scan_targets(targets: List[ParamTarget],
         else:
             logger.success("  → no vulnerabilities detected")
 
-    scan_end = datetime.datetime.utcnow().isoformat()
+    scan_end = datetime.datetime.now(datetime.timezone.utc).isoformat()
     scan = ScanReport(
         target_url           = target_label or (targets[0].url if targets else "n/a"),
         scan_start           = scan_start,
